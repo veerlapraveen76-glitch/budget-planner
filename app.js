@@ -1,0 +1,1956 @@
+// ==========================================
+// BUDGET PLANNER PRO - FRONTEND
+// ==========================================
+
+const API_URL = "http://localhost:5000/api";
+
+let currentUser = null;
+let income = 0;
+let expenses = [];
+let goals = [];
+let recurringExpenses = [];
+
+
+// ==========================================
+// START APP
+// ==========================================
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    attachEvents();
+
+    const savedUser =
+        localStorage.getItem("budgetLoggedUser");
+
+    if (savedUser) {
+
+        try {
+
+            currentUser = JSON.parse(savedUser);
+
+            loadUserData();
+
+            showDashboard();
+
+        } catch (error) {
+
+            console.error("Saved user error:", error);
+
+            localStorage.removeItem("budgetLoggedUser");
+
+            showLogin();
+
+        }
+
+    } else {
+
+        showLogin();
+
+    }
+
+    setTodayDate();
+
+});
+
+
+// ==========================================
+// GET ELEMENT
+// ==========================================
+
+function el(id) {
+    return document.getElementById(id);
+}
+
+
+// ==========================================
+// LOGIN / SIGNUP UI
+// ==========================================
+
+function showLogin() {
+
+    if (el("authPage"))
+        el("authPage").style.display = "flex";
+
+    if (el("app"))
+        el("app").style.display = "none";
+
+    if (el("loginForm"))
+        el("loginForm").style.display = "block";
+
+    if (el("signupForm"))
+        el("signupForm").style.display = "none";
+
+    if (el("authTitle"))
+        el("authTitle").textContent = "Welcome to BudgetPlanner";
+
+    if (el("switchText"))
+        el("switchText").textContent =
+            "Don't have an account?";
+
+    if (el("switchAuth"))
+        el("switchAuth").textContent =
+            "Create Account";
+
+    clearMessage();
+}
+
+
+function showSignup() {
+
+    if (el("authPage"))
+        el("authPage").style.display = "flex";
+
+    if (el("app"))
+        el("app").style.display = "none";
+
+    if (el("loginForm"))
+        el("loginForm").style.display = "none";
+
+    if (el("signupForm"))
+        el("signupForm").style.display = "block";
+
+    if (el("authTitle"))
+        el("authTitle").textContent =
+            "Create Account";
+
+    if (el("switchText"))
+        el("switchText").textContent =
+            "Already have an account?";
+
+    if (el("switchAuth"))
+        el("switchAuth").textContent =
+            "Login";
+
+    clearMessage();
+}
+
+
+// ==========================================
+// MESSAGE
+// ==========================================
+
+function clearMessage() {
+
+    const message = el("authMessage");
+
+    if (!message) return;
+
+    message.style.display = "none";
+    message.textContent = "";
+
+}
+
+
+function showMessage(message) {
+
+    const authMessage = el("authMessage");
+
+    if (!authMessage) {
+
+        alert(message);
+
+        return;
+
+    }
+
+    authMessage.textContent = message;
+    authMessage.style.display = "block";
+
+}
+
+
+// ==========================================
+// ATTACH EVENTS
+// ==========================================
+
+function attachEvents() {
+
+    const switchAuth = el("switchAuth");
+    const signupForm = el("signupForm");
+    const loginForm = el("loginForm");
+    const logoutBtn = el("logoutBtn");
+    const createBudgetBtn = el("createBudgetBtn");
+    const expenseForm = el("expenseForm");
+    const filterCategory = el("filterCategory");
+    const goalForm = el("goalForm");
+    const recurringForm = el("recurringForm");
+    const monthFilter = el("monthFilter");
+
+
+    // Switch Login / Signup
+
+    if (switchAuth) {
+
+        switchAuth.addEventListener("click", (event) => {
+
+            event.preventDefault();
+
+            if (
+                signupForm &&
+                signupForm.style.display === "none"
+            ) {
+
+                showSignup();
+
+            } else {
+
+                showLogin();
+
+            }
+
+        });
+
+    }
+
+
+    // Signup
+
+    if (signupForm) {
+
+        signupForm.addEventListener(
+            "submit",
+            signup
+        );
+
+    }
+
+
+    // Login
+
+    if (loginForm) {
+
+        loginForm.addEventListener(
+            "submit",
+            login
+        );
+
+    }
+
+
+    // Logout
+
+    if (logoutBtn) {
+
+        logoutBtn.addEventListener(
+            "click",
+            logout
+        );
+
+    }
+
+
+    // Create Budget
+
+    if (createBudgetBtn) {
+
+        createBudgetBtn.addEventListener(
+            "click",
+            createBudget
+        );
+
+    }
+
+
+    // Expense
+
+    if (expenseForm) {
+
+        expenseForm.addEventListener(
+            "submit",
+            addExpense
+        );
+
+    }
+
+
+    // Expense filter
+
+    if (filterCategory) {
+
+        filterCategory.addEventListener(
+            "change",
+            displayExpenses
+        );
+
+    }
+
+    if (monthFilter) {
+        monthFilter.addEventListener("change", () => {
+            updateDashboard();
+            displayExpenses();
+        });
+    }
+
+
+    // Goals
+
+    if (goalForm) {
+
+        goalForm.addEventListener(
+            "submit",
+            addGoal
+        );
+
+    }
+
+
+    // Recurring
+
+    if (recurringForm) {
+
+        recurringForm.addEventListener(
+            "submit",
+            addRecurring
+        );
+
+    }
+
+}
+
+
+// ==========================================
+// SIGNUP
+// ==========================================
+
+async function signup(event) {
+
+    event.preventDefault();
+
+    const name =
+        el("signupName")?.value.trim();
+
+    const email =
+        el("signupEmail")?.value
+            .trim()
+            .toLowerCase();
+
+    const password =
+        el("signupPassword")?.value;
+
+    const confirmPassword =
+        el("confirmPassword")?.value;
+
+
+    if (
+        !name ||
+        !email ||
+        !password ||
+        !confirmPassword
+    ) {
+
+        showMessage(
+            "Please fill all fields."
+        );
+
+        return;
+
+    }
+
+
+    if (password.length < 6) {
+
+        showMessage(
+            "Password must contain at least 6 characters."
+        );
+
+        return;
+
+    }
+
+
+    if (password !== confirmPassword) {
+
+        showMessage(
+            "Passwords do not match."
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                `${API_URL}/register`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        name: name,
+
+                        email: email,
+
+                        password: password
+
+                    })
+
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            showMessage(
+                data.message ||
+                "Registration failed."
+            );
+
+            return;
+
+        }
+
+
+        showMessage(
+            "Account created successfully!"
+        );
+
+
+        if (el("signupForm"))
+            el("signupForm").reset();
+
+
+        setTimeout(() => {
+
+            showLogin();
+
+            if (el("loginEmail"))
+                el("loginEmail").value =
+                    email;
+
+        }, 800);
+
+
+    } catch (error) {
+
+        console.error(
+            "Signup error:",
+            error
+        );
+
+        showMessage(
+            "Cannot connect to server. Make sure backend is running."
+        );
+
+    }
+
+}
+
+
+// ==========================================
+// LOGIN
+// ==========================================
+
+async function login(event) {
+
+    event.preventDefault();
+
+
+    const email =
+        el("loginEmail")?.value
+            .trim()
+            .toLowerCase();
+
+    const password =
+        el("loginPassword")?.value;
+
+
+    if (!email || !password) {
+
+        showMessage(
+            "Please enter email and password."
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                `${API_URL}/login`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        email: email,
+
+                        password: password
+
+                    })
+
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            showMessage(
+                data.message ||
+                "Login failed."
+            );
+
+            return;
+
+        }
+
+
+        currentUser = data.user;
+
+
+        localStorage.setItem(
+            "budgetLoggedUser",
+            JSON.stringify(currentUser)
+        );
+
+
+        loadUserData();
+
+        showDashboard();
+
+
+    } catch (error) {
+
+        console.error(
+            "Login error:",
+            error
+        );
+
+        showMessage(
+            "Cannot connect to server. Make sure backend is running."
+        );
+
+    }
+
+}
+
+
+// ==========================================
+// SHOW DASHBOARD
+// ==========================================
+
+function showDashboard() {
+
+    if (el("authPage"))
+        el("authPage").style.display =
+            "none";
+
+    if (el("app"))
+        el("app").style.display =
+            "block";
+
+
+    if (el("userName")) {
+
+        el("userName").textContent =
+            currentUser?.name ||
+            "User";
+
+    }
+
+}
+
+
+// ==========================================
+// LOAD USER DATA
+// ==========================================
+
+function loadUserData() {
+
+    if (!currentUser) return;
+
+
+    income =
+        Number(currentUser.income) || 0;
+
+
+    expenses =
+        Array.isArray(
+            currentUser.expenses
+        )
+            ? currentUser.expenses
+            : [];
+
+
+    goals =
+        Array.isArray(
+            currentUser.goals
+        )
+            ? currentUser.goals
+            : [];
+
+
+    recurringExpenses =
+        Array.isArray(
+            currentUser.recurringExpenses
+        )
+            ? currentUser.recurringExpenses
+            : [];
+
+
+    if (el("salaryInput")) {
+
+        el("salaryInput").value =
+            income || "";
+
+    }
+
+    if (el("monthFilter") && !el("monthFilter").value) {
+        el("monthFilter").value = currentMonthKey();
+    }
+
+
+    updateDashboard();
+
+    displayExpenses();
+
+    displayGoals();
+
+    displayRecurringExpenses();
+
+
+    if (income > 0) {
+
+        generateBudget(income);
+
+    }
+
+}
+
+
+// ==========================================
+// SAVE USER DATA
+// ==========================================
+
+async function saveUserData() {
+
+    if (!currentUser) return;
+
+
+    currentUser.income =
+        Number(income) || 0;
+
+    currentUser.expenses =
+        expenses;
+
+    currentUser.goals =
+        goals;
+
+    currentUser.recurringExpenses =
+        recurringExpenses;
+
+
+    // Local backup
+
+    localStorage.setItem(
+        "budgetLoggedUser",
+        JSON.stringify(currentUser)
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                `${API_URL}/user/${currentUser.id}`,
+                {
+                    method: "PUT",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        income: income,
+
+                        expenses: expenses,
+
+                        goals: goals,
+
+                        recurringExpenses:
+                            recurringExpenses
+
+                    })
+
+                }
+            );
+
+
+        if (!response.ok) {
+
+            console.warn(
+                "Backend data save failed."
+            );
+
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Could not save data to backend:",
+            error
+        );
+
+    }
+
+}
+
+
+// ==========================================
+// CREATE BUDGET
+// ==========================================
+
+function createBudget() {
+
+    const salary =
+        Number(
+            el("salaryInput")?.value
+        );
+
+
+    if (!salary || salary <= 0) {
+
+        alert(
+            "Please enter a valid monthly income."
+        );
+
+        return;
+
+    }
+
+
+    income = salary;
+
+
+    saveUserData();
+
+
+    generateBudget(salary);
+
+    updateDashboard();
+
+
+    alert(
+        "Your smart budget has been created successfully!"
+    );
+
+}
+
+
+// ==========================================
+// SMART BUDGET
+// ==========================================
+
+function generateBudget(salary) {
+
+    const recommendations = [
+
+        ["🏠 Rent / PG", 20],
+
+        ["🍱 Food", 12],
+
+        ["🚌 Transport", 6],
+
+        ["💡 Bills", 5],
+
+        ["🛍️ Shopping", 6],
+
+        ["🏥 Health", 3],
+
+        ["🎬 Entertainment", 4],
+
+        ["📚 Education", 4],
+
+        ["🛟 Emergency Fund", 8],
+
+        ["💰 Savings", 32]
+
+    ];
+
+
+    const container =
+        el("budgetRecommendations");
+
+
+    if (!container) return;
+
+
+    container.innerHTML = "";
+
+
+    recommendations.forEach(
+        ([name, percentage]) => {
+
+            const amount =
+                salary *
+                percentage /
+                100;
+
+
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+
+            card.className =
+                "budget-item";
+
+
+            card.innerHTML = `
+
+                <h3>${name}</h3>
+
+                <p>
+                    Recommended allocation:
+                    ${percentage}%
+                </p>
+
+                <div class="budget-amount">
+                    ₹${money(amount)}
+                </div>
+
+                <div class="progress">
+
+                    <div
+                        class="progress-bar"
+                        style="width:${percentage}%">
+                    </div>
+
+                </div>
+
+            `;
+
+
+            container.appendChild(card);
+
+        }
+    );
+
+}
+
+
+// ==========================================
+// ADD EXPENSE
+// ==========================================
+
+function addExpense(event) {
+
+    event.preventDefault();
+
+
+    const amount =
+        Number(
+            el("expenseAmount")?.value
+        );
+
+
+    const category =
+        el("expenseCategory")?.value;
+
+
+    const description =
+        el("expenseDescription")
+            ?.value
+            .trim();
+
+
+    const date =
+        el("expenseDate")?.value;
+
+
+    if (
+        !amount ||
+        amount <= 0 ||
+        !category ||
+        !description ||
+        !date
+    ) {
+
+        alert(
+            "Please fill all expense details."
+        );
+
+        return;
+
+    }
+
+
+    expenses.push({
+
+        id: Date.now(),
+
+        amount: amount,
+
+        category: category,
+
+        description: description,
+
+        date: date
+
+    });
+
+
+    saveUserData();
+
+    updateDashboard();
+
+    displayExpenses();
+
+
+    if (el("expenseForm"))
+        el("expenseForm").reset();
+
+
+    setTodayDate();
+
+}
+
+
+// ==========================================
+// DISPLAY EXPENSES
+// ==========================================
+
+function displayExpenses() {
+
+    const container =
+        el("expenseList");
+
+
+    if (!container) return;
+
+
+    const filter =
+        el("filterCategory")?.value ||
+        "All";
+
+
+    const month = selectedMonthKey();
+    let list = expenses.filter(expense => !expense.date || expense.date.slice(0, 7) === month);
+
+
+    if (filter !== "All") {
+
+        list =
+            expenses.filter(
+                expense =>
+                    expense.category ===
+                    filter
+            );
+
+    }
+
+
+    if (list.length === 0) {
+
+        container.innerHTML = `
+
+            <div class="empty-state">
+                No expenses found.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    list
+        .slice()
+        .reverse()
+        .forEach(expense => {
+
+            const row =
+                document.createElement(
+                    "div"
+                );
+
+
+            row.className =
+                "expense-row";
+
+
+            row.innerHTML = `
+
+                <div class="expense-icon">
+                    ${categoryIcon(
+                        expense.category
+                    )}
+                </div>
+
+                <div class="expense-info">
+
+                    <h3>
+                        ${safe(
+                            expense.description
+                        )}
+                    </h3>
+
+                    <p>
+                        ${safe(
+                            expense.category
+                        )}
+                        •
+                        ${dateFormat(
+                            expense.date
+                        )}
+                    </p>
+
+                </div>
+
+                <div class="expense-amount">
+                    - ₹${money(
+                        expense.amount
+                    )}
+                </div>
+
+                <button
+                    class="delete-btn"
+                    onclick="deleteExpense(${expense.id})">
+
+                    Delete
+
+                </button>
+
+            `;
+
+
+            container.appendChild(row);
+
+        });
+
+}
+
+
+// ==========================================
+// DELETE EXPENSE
+// ==========================================
+
+function deleteExpense(id) {
+
+    if (
+        !confirm(
+            "Are you sure you want to delete this expense?"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    expenses =
+        expenses.filter(
+            expense =>
+                expense.id !== id
+        );
+
+
+    saveUserData();
+
+    updateDashboard();
+
+    displayExpenses();
+
+}
+
+
+// ==========================================
+// ADD SAVINGS GOAL
+// ==========================================
+
+function addGoal(event) {
+
+    event.preventDefault();
+
+
+    const name =
+        el("goalName")
+            ?.value
+            .trim();
+
+
+    const target =
+        Number(
+            el("goalTarget")?.value
+        );
+
+
+    if (
+        !name ||
+        !target ||
+        target <= 0
+    ) {
+
+        alert(
+            "Please enter a valid goal."
+        );
+
+        return;
+
+    }
+
+
+    goals.push({
+
+        id: Date.now(),
+
+        name: name,
+
+        target: target,
+
+        saved: 0
+
+    });
+
+
+    saveUserData();
+
+    displayGoals();
+
+
+    if (el("goalForm"))
+        el("goalForm").reset();
+
+}
+
+
+// ==========================================
+// DISPLAY GOALS
+// ==========================================
+
+function displayGoals() {
+
+    const container =
+        el("goalList");
+
+
+    if (!container) return;
+
+
+    if (goals.length === 0) {
+
+        container.innerHTML = `
+
+            <div class="empty-state">
+                No savings goals yet.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    goals.forEach(goal => {
+
+        const target =
+            Number(goal.target) || 0;
+
+        const saved =
+            Number(goal.saved) || 0;
+
+
+        const percentage =
+            target > 0
+                ? Math.min(
+                    saved / target * 100,
+                    100
+                )
+                : 0;
+
+
+        const card =
+            document.createElement(
+                "div"
+            );
+
+
+        card.className =
+            "goal-card";
+
+
+        card.innerHTML = `
+
+            <div class="goal-header">
+
+                <h3>
+                    🎯 ${safe(goal.name)}
+                </h3>
+
+                <span>
+                    ${percentage.toFixed(0)}%
+                </span>
+
+            </div>
+
+            <div class="progress">
+
+                <div
+                    class="progress-bar"
+                    style="width:${percentage}%">
+                </div>
+
+            </div>
+
+            <div class="goal-info">
+
+                ₹${money(saved)}
+                saved of
+                ₹${money(target)}
+
+            </div>
+
+        `;
+
+
+        container.appendChild(card);
+
+    });
+
+}
+
+
+// ==========================================
+// ADD RECURRING EXPENSE
+// ==========================================
+
+function addRecurring(event) {
+
+    event.preventDefault();
+
+
+    const name =
+        el("recurringName")
+            ?.value
+            .trim();
+
+
+    const amount =
+        Number(
+            el("recurringAmount")?.value
+        );
+
+
+    const category =
+        el("recurringCategory")?.value;
+
+
+    const day =
+        Number(
+            el("recurringDay")?.value
+        );
+
+
+    if (
+        !name ||
+        !amount ||
+        amount <= 0 ||
+        !category ||
+        !day
+    ) {
+
+        alert(
+            "Please fill all recurring expense details."
+        );
+
+        return;
+
+    }
+
+
+    recurringExpenses.push({
+
+        id: Date.now(),
+
+        name: name,
+
+        amount: amount,
+
+        category: category,
+
+        day: day
+
+    });
+
+
+    saveUserData();
+
+    displayRecurringExpenses();
+
+
+    if (el("recurringForm"))
+        el("recurringForm").reset();
+
+}
+
+
+// ==========================================
+// DISPLAY RECURRING EXPENSES
+// ==========================================
+
+function displayRecurringExpenses() {
+
+    const container =
+        el("recurringList");
+
+
+    if (!container) return;
+
+
+    if (
+        recurringExpenses.length === 0
+    ) {
+
+        container.innerHTML = `
+
+            <div class="empty-state">
+                No recurring expenses.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    recurringExpenses.forEach(item => {
+
+        const row =
+            document.createElement(
+                "div"
+            );
+
+
+        row.className =
+            "recurring-row";
+
+
+        row.innerHTML = `
+
+            <div class="recurring-info">
+
+                <h3>
+                    ${safe(item.name)}
+                </h3>
+
+                <p>
+                    ${safe(item.category)}
+                    • Every month on day
+                    ${item.day}
+                </p>
+
+            </div>
+
+            <strong>
+                ₹${money(item.amount)}
+            </strong>
+
+        `;
+
+
+        container.appendChild(row);
+
+    });
+
+}
+
+
+// ==========================================
+// UPDATE DASHBOARD
+// ==========================================
+
+function updateDashboard() {
+
+    const monthExpenses = getSelectedMonthExpenses();
+
+    const totalExpenses =
+        monthExpenses.reduce(
+            (total, expense) =>
+                total +
+                Number(expense.amount || 0),
+            0
+        );
+
+
+    const availableSavings =
+        income -
+        totalExpenses;
+
+
+    const savingsRate =
+        income > 0
+            ? availableSavings /
+              income *
+              100
+            : 0;
+
+
+    if (el("totalIncome"))
+        el("totalIncome").textContent =
+            "₹" + money(income);
+
+
+    if (el("totalExpenses"))
+        el("totalExpenses").textContent =
+            "₹" + money(totalExpenses);
+
+
+    if (el("totalSavings"))
+        el("totalSavings").textContent =
+            "₹" + money(availableSavings);
+
+
+    if (el("savingsRate"))
+        el("savingsRate").textContent =
+            savingsRate.toFixed(1) + "%";
+
+
+    if (el("reportIncome"))
+        el("reportIncome").textContent =
+            "₹" + money(income);
+
+
+    if (el("reportExpense"))
+        el("reportExpense").textContent =
+            "₹" + money(totalExpenses);
+
+
+    if (el("reportSavings"))
+        el("reportSavings").textContent =
+            "₹" + money(availableSavings);
+
+
+    calculateHighestCategory(monthExpenses);
+
+}
+
+
+// ==========================================
+// HIGHEST SPENDING CATEGORY
+// ==========================================
+
+function calculateHighestCategory(sourceExpenses = getSelectedMonthExpenses()) {
+
+    const totals = {};
+
+
+    sourceExpenses.forEach(expense => {
+
+        const category =
+            expense.category;
+
+        if (!totals[category]) {
+
+            totals[category] = 0;
+
+        }
+
+
+        totals[category] +=
+            Number(expense.amount || 0);
+
+    });
+
+
+    let highest = "—";
+
+    let highestAmount = 0;
+
+
+    Object.keys(totals).forEach(category => {
+
+        if (
+            totals[category] >
+            highestAmount
+        ) {
+
+            highestAmount =
+                totals[category];
+
+            highest =
+                category +
+                " - ₹" +
+                money(highestAmount);
+
+        }
+
+    });
+
+
+    if (el("highestCategory"))
+        el("highestCategory").textContent =
+            highest;
+
+}
+
+
+// ==========================================
+// LOGOUT
+// ==========================================
+
+function logout() {
+
+    localStorage.removeItem(
+        "budgetLoggedUser"
+    );
+
+
+    currentUser = null;
+
+    income = 0;
+
+    expenses = [];
+
+    goals = [];
+
+    recurringExpenses = [];
+
+
+    showLogin();
+
+}
+
+
+// ==========================================
+// PASSWORD SHOW / HIDE
+// ==========================================
+
+function togglePassword(id) {
+
+    const input = el(id);
+
+    if (!input) return;
+
+
+    if (input.type === "password") {
+
+        input.type = "text";
+
+    } else {
+
+        input.type = "password";
+
+    }
+
+}
+
+
+// ==========================================
+// MONEY FORMAT
+// ==========================================
+
+function money(amount) {
+
+    return Number(amount || 0)
+        .toLocaleString(
+            "en-IN",
+            {
+                maximumFractionDigits: 0
+            }
+        );
+
+}
+
+
+// ==========================================
+// DATE FORMAT
+// ==========================================
+
+function dateFormat(date) {
+
+    if (!date) return "";
+
+    const d = new Date(date);
+
+    if (isNaN(d.getTime())) return date;
+
+
+    return d.toLocaleDateString(
+        "en-IN",
+        {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        }
+    );
+
+}
+
+
+// ==========================================
+// CATEGORY ICON
+// ==========================================
+
+function categoryIcon(category) {
+
+    const icons = {
+
+        Rent: "🏠",
+
+        Food: "🍱",
+
+        Transport: "🚌",
+
+        Bills: "💡",
+
+        Shopping: "🛍️",
+
+        Health: "🏥",
+
+        Entertainment: "🎬",
+
+        Education: "📚",
+
+        Other: "📌"
+
+    };
+
+
+    return icons[category] || "📌";
+
+}
+
+
+// ==========================================
+// SAFE TEXT
+// ==========================================
+
+function safe(value) {
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
+
+
+// ==========================================
+// TODAY DATE
+// ==========================================
+
+function setTodayDate() {
+
+    const input =
+        el("expenseDate");
+
+
+    if (
+        input &&
+        !input.value
+    ) {
+
+        const now = new Date();
+        input.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    }
+
+}
+
+function currentMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function selectedMonthKey() {
+    return el("monthFilter")?.value || currentMonthKey();
+}
+
+function getSelectedMonthExpenses() {
+    const month = selectedMonthKey();
+    return expenses.filter(expense => expense.date && expense.date.slice(0, 7) === month);
+}
+
+
+// ==========================================
+// DOWNLOAD REPORT
+// ==========================================
+
+function downloadReport() {
+
+    if (!currentUser) {
+
+        alert(
+            "Please login first."
+        );
+
+        return;
+
+    }
+
+
+    const totalExpenses =
+        expenses.reduce(
+            (sum, expense) =>
+                sum +
+                Number(
+                    expense.amount || 0
+                ),
+            0
+        );
+
+
+    const savings =
+        income -
+        totalExpenses;
+
+
+    const savingsRate =
+        income > 0
+            ? savings / income * 100
+            : 0;
+
+
+    let report = "";
+
+
+    report +=
+        "BUDGET PLANNER PRO\n";
+
+    report +=
+        "============================\n\n";
+
+
+    report +=
+        "USER INFORMATION\n";
+
+    report +=
+        "----------------------------\n";
+
+
+    report +=
+        "Name: " +
+        currentUser.name +
+        "\n";
+
+
+    report +=
+        "Email: " +
+        currentUser.email +
+        "\n\n";
+
+
+    report +=
+        "MONTHLY SUMMARY\n";
+
+    report +=
+        "----------------------------\n";
+
+
+    report +=
+        "Income: ₹" +
+        money(income) +
+        "\n";
+
+
+    report +=
+        "Total Expenses: ₹" +
+        money(totalExpenses) +
+        "\n";
+
+
+    report +=
+        "Available Savings: ₹" +
+        money(savings) +
+        "\n";
+
+
+    report +=
+        "Savings Rate: " +
+        savingsRate.toFixed(1) +
+        "%\n\n";
+
+
+    report +=
+        "EXPENSE DETAILS\n";
+
+    report +=
+        "----------------------------\n";
+
+
+    if (expenses.length === 0) {
+
+        report +=
+            "No expenses recorded.\n";
+
+    } else {
+
+        expenses.forEach(
+            expense => {
+
+                report +=
+                    dateFormat(
+                        expense.date
+                    ) +
+                    " | " +
+                    expense.category +
+                    " | " +
+                    expense.description +
+                    " | ₹" +
+                    money(
+                        expense.amount
+                    ) +
+                    "\n";
+
+            }
+        );
+
+    }
+
+
+    report += "\n";
+
+    report +=
+        "SAVINGS GOALS\n";
+
+    report +=
+        "----------------------------\n";
+
+
+    if (goals.length === 0) {
+
+        report +=
+            "No savings goals.\n";
+
+    } else {
+
+        goals.forEach(goal => {
+
+            report +=
+                goal.name +
+                " | Target: ₹" +
+                money(goal.target) +
+                " | Saved: ₹" +
+                money(goal.saved) +
+                "\n";
+
+        });
+
+    }
+
+
+    report += "\n";
+
+    report +=
+        "RECURRING EXPENSES\n";
+
+    report +=
+        "----------------------------\n";
+
+
+    if (
+        recurringExpenses.length === 0
+    ) {
+
+        report +=
+            "No recurring expenses.\n";
+
+    } else {
+
+        recurringExpenses.forEach(
+            item => {
+
+                report +=
+                    item.name +
+                    " | " +
+                    item.category +
+                    " | ₹" +
+                    money(item.amount) +
+                    " | Day " +
+                    item.day +
+                    "\n";
+
+            }
+        );
+
+    }
+
+
+    const blob =
+        new Blob(
+            [report],
+            {
+                type:
+                    "text/plain;charset=utf-8"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(blob);
+
+
+    const link =
+        document.createElement("a");
+
+
+    link.href = url;
+
+    link.download =
+        "Budget-Planner-Report.txt";
+
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+// ==========================================
+// MAKE FUNCTIONS AVAILABLE TO HTML
+// ==========================================
+
+window.deleteExpense =
+    deleteExpense;
+
+window.togglePassword =
+    togglePassword;
+
+window.downloadReport =
+    downloadReport;
